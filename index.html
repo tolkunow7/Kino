@@ -64,13 +64,13 @@ const ADMIN_EMAIL="tolkunowmaksat7@gmail.com";
 const cats=["Hemmesi","Kino","Serial","Multfilm","Karaoke"];
 const icons={Kino:"🎬",Serial:"📺",Multfilm:"🧸",Karaoke:"🎤"};
 
-let cat="Hemmesi", films=[], uid=null, isAdmin=false, reqs={};
+let cat="Hemmesi", films=[], uid=null, isAdmin=false, reqs={}, unsub=null;
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const film=id=>films.find(f=>f.id===id);
 const msg=t=>{const m=$("msg"); if(m) m.textContent=t;};
 const show=h=>{$("box").innerHTML=h; $("ov").classList.add("show");};
-const closeBox=()=>{$("ov").classList.remove("show"); $("box").innerHTML="";};
+const closeBox=()=>{ if(unsub){unsub();unsub=null;} $("ov").classList.remove("show"); $("box").innerHTML=""; };
 
 // ====== GIRIŞ (her telefona gizlin ID) ======
 onAuthStateChanged(auth,u=>{
@@ -103,18 +103,31 @@ function openFilm(id){
   <p>1. Şu nomere ${PRICE} manat geçir:</p><div class="num">${PAY_NUMBER}</div>
   <p>2. Öz nomeriňi ýaz:</p><input id="ph" type="tel" placeholder="+993 6X XXXXXX">
   <button class="btn" onclick="sendReq('${id}')">Tölegi tassykla</button>
-  <p>3. Kody alanyňdan soň şu ýere ýaz:</p><input id="cd" type="tel" maxlength="6" placeholder="Kod (6 san)">
+  <div class="msg" id="msg"></div>
+  <p>3. Tölegiň barlanandan soň kod şu ýerde özi çykar:</p><input id="cd" type="tel" maxlength="6" placeholder="Kod (6 san)">
+  <div class="msg" id="cmsg"></div>
   <button class="btn" onclick="useCode('${id}')">Filmi aç</button>
-  <div class="msg" id="msg"></div><div id="cms"></div>
+  <div id="cms"></div>
   <button class="btn alt" onclick="closeBox()">Ýap</button>`);
   drawCm(id);
+  watchCode(id);
+}
+function watchCode(id){
+  if(unsub){unsub(); unsub=null;}
+  if(!uid) return;
+  unsub=onSnapshot(query(collection(db,"requests"),where("uid","==",uid),where("film","==",id)),s=>{
+    const c=$("cd"), m=$("cmsg"); if(!c||!m) return;
+    const r=s.docs.map(d=>d.data()).filter(x=>x.code).sort((a,b)=>b.at-a.at)[0];
+    if(r){ c.value=r.code; m.textContent="Tassyklandy! Kodyňyz: "+r.code+". Indi «Filmi aç» düwmesini bas."; }
+    else if(s.size){ m.textContent="Haýyşyň barlanýar. Kod şu ýere özi geler."; }
+  },()=>{});
 }
 async function sendReq(id){
   const ph=$("ph").value.trim();
   if(ph.length<8) return msg("Nomeriňi dogry ýaz.");
   try{
     await addDoc(collection(db,"requests"),{film:id,phone:ph,uid,at:Date.now()});
-    msg("Haýyş iberildi. Töleg barlanandan soň kod berilýär.");
+    msg("Haýyş iberildi. Töleg barlanandan soň kod aşakda özi çykar.");
   }catch(e){ msg("Ýalňyşlyk: "+e.code); }
 }
 async function tryPlay(id){
@@ -132,7 +145,7 @@ function play(id,u){
 async function useCode(id){
   if(await tryPlay(id)) return;       // öň tölän bolsa, kod gerek däl
   const cd=$("cd").value.trim();
-  if(!cd) return msg("Kody ýaz.");
+  if(!cd) return msg("Kod entek gelmedi ýa-da ýazylmady.");
   try{ await setDoc(doc(db,"redeemed",uid+"_"+id),{film:id,code:cd}); }
   catch(e){ return msg("Kod ýalňyş ýa-da başga telefona baglanan."); }
   if(!(await tryPlay(id))) msg("Wideo linki entek goýulmadyk.");
